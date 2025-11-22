@@ -8,3 +8,5 @@ config.py
 main copy.py
 main copy 2.py
 vrnv/
+*.zip
+*_delivery_*.zip
