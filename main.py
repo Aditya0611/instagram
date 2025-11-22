@@ -146,13 +146,21 @@ class Config:
     
     # Browser Configuration
     # Default to headless=True in CI environments (GitHub Actions, etc.)
-    _headless_env = os.getenv("HEADLESS", "").lower()
-    if _headless_env == "":
-        # If not set, default to True (headless) if in CI environment
-        _is_ci = os.getenv("CI", "false").lower() == "true" or os.getenv("GITHUB_ACTIONS", "false").lower() == "true"
-        HEADLESS: bool = _is_ci
+    _headless_env = os.getenv("HEADLESS", "").strip().lower()
+    _is_ci = os.getenv("CI", "false").lower() == "true" or os.getenv("GITHUB_ACTIONS", "false").lower() == "true"
+    
+    if _headless_env == "true":
+        _headless_value = True
+    elif _headless_env == "false":
+        _headless_value = False
     else:
-        HEADLESS: bool = _headless_env == "true"
+        # If not explicitly set, default to True (headless) in CI environments
+        _headless_value = _is_ci
+    
+    HEADLESS: bool = _headless_value
+    logger.info(f"Browser headless mode: {HEADLESS} (CI={_is_ci}, HEADLESS env='{_headless_env}')")
+    if _is_ci:
+        print(f"🔧 Running in CI environment - Headless mode: {HEADLESS}")
     VIEWPORT_WIDTH: int = 1920
     VIEWPORT_HEIGHT: int = 1080
     LOCALE: str = "en-US"
@@ -1017,6 +1025,8 @@ def run_scraper_job() -> None:
     
     with sync_playwright() as p:
         # Launch browser with configured settings
+        logger.info(f"Launching browser with headless={Config.HEADLESS}")
+        print(f"🔧 Launching browser (headless={Config.HEADLESS})...")
         browser = p.chromium.launch(
             headless=Config.HEADLESS,
             args=[
