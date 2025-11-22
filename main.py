@@ -301,8 +301,21 @@ def login_instagram(page) -> bool:
     try:
         logger.info("Navigating to Instagram login page")
         print("[+] Navigating to Instagram...")
-        page.goto(INSTAGRAM_LOGIN_URL, wait_until="networkidle", timeout=30000)
-        time.sleep(DELAY_PAGE_LOAD)
+        # Try multiple wait strategies for Instagram's dynamic page
+        try:
+            page.goto(INSTAGRAM_LOGIN_URL, wait_until="networkidle", timeout=30000)
+        except:
+            # Fallback to domcontentloaded if networkidle times out
+            page.goto(INSTAGRAM_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+        
+        # Wait for page to fully render (Instagram uses React/JS)
+        time.sleep(5)
+        
+        # Wait for any loading indicators to disappear
+        try:
+            page.wait_for_load_state("networkidle", timeout=10000)
+        except:
+            pass  # Continue even if networkidle times out
         
         # Check if already logged in
         if page.url.startswith(INSTAGRAM_BASE_URL) and "/accounts/login" not in page.url:
@@ -348,17 +361,43 @@ def login_instagram(page) -> bool:
         if not username_field:
             # Debug: Try to find any input fields on the page
             try:
+                # Wait a bit more for dynamic content
+                time.sleep(3)
                 all_inputs = page.locator("input").all()
                 logger.error(f"Found {len(all_inputs)} input fields on page")
-                for i, inp in enumerate(all_inputs[:5]):  # Log first 5 inputs
+                
+                # Also check for input-like elements
+                all_inputs_alt = page.locator("input, textarea, [contenteditable='true']").all()
+                logger.error(f"Found {len(all_inputs_alt)} input-like elements (including textarea/contenteditable)")
+                
+                # Log page title and URL for debugging
+                logger.error(f"Page title: {page.title()}")
+                logger.error(f"Page URL: {page.url}")
+                
+                # Try to find form elements
+                forms = page.locator("form").all()
+                logger.error(f"Found {len(forms)} form elements")
+                
+                for i, inp in enumerate(all_inputs[:10]):  # Log first 10 inputs
                     try:
                         input_type = inp.get_attribute("type") or "text"
                         input_name = inp.get_attribute("name") or "no-name"
                         input_aria = inp.get_attribute("aria-label") or "no-aria"
                         input_placeholder = inp.get_attribute("placeholder") or "no-placeholder"
-                        logger.error(f"Input {i}: type={input_type}, name={input_name}, aria-label={input_aria}, placeholder={input_placeholder}")
-                    except:
-                        pass
+                        input_id = inp.get_attribute("id") or "no-id"
+                        is_visible = inp.is_visible()
+                        logger.error(f"Input {i}: type={input_type}, name={input_name}, id={input_id}, aria-label={input_aria}, placeholder={input_placeholder}, visible={is_visible}")
+                    except Exception as e:
+                        logger.error(f"Could not inspect input {i}: {e}")
+                
+                # Try to take a screenshot for debugging (in CI)
+                try:
+                    if os.getenv("CI"):
+                        page.screenshot(path="instagram_login_debug.png")
+                        logger.error("Screenshot saved: instagram_login_debug.png")
+                except:
+                    pass
+                    
             except Exception as e:
                 logger.error(f"Could not inspect inputs: {e}")
             
