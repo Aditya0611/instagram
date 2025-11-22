@@ -42,7 +42,19 @@ SUBMIT_BUTTON_SELECTOR = "button[type='submit']"
 PASSWORD_FIELD_SELECTOR = "input[name='password']"
 USERNAME_SELECTORS = [
     "input[name='username']",
-    "input[aria-label='Phone number, username, or email']"
+    "input[aria-label='Phone number, username, or email']",
+    "input[aria-label*='username']",
+    "input[aria-label*='Username']",
+    "input[aria-label*='email']",
+    "input[aria-label*='Email']",
+    "input[type='text']",
+    "input[autocomplete='username']",
+    "input[placeholder*='username']",
+    "input[placeholder*='Username']",
+    "input[placeholder*='email']",
+    "input[placeholder*='Email']",
+    "input[placeholder*='phone']",
+    "input[placeholder*='Phone']"
 ]
 POPUP_SELECTORS = [
     "button:has-text('Not Now')",
@@ -281,7 +293,7 @@ def login_instagram(page) -> bool:
     try:
         logger.info("Navigating to Instagram login page")
         print("[+] Navigating to Instagram...")
-        page.goto(INSTAGRAM_LOGIN_URL, wait_until="domcontentloaded")
+        page.goto(INSTAGRAM_LOGIN_URL, wait_until="networkidle", timeout=30000)
         time.sleep(DELAY_PAGE_LOAD)
         
         # Check if already logged in
@@ -289,6 +301,24 @@ def login_instagram(page) -> bool:
             logger.info("Already logged in to Instagram")
             print("✅ Already logged in!\n")
             return True
+        
+        # Handle cookie consent FIRST (before looking for login fields)
+        logger.info("Checking for cookie consent banner")
+        print("[+] Checking for cookie consent...")
+        for selector in COOKIE_CONSENT_SELECTORS:
+            try:
+                cookie_button = page.locator(selector).first
+                if cookie_button.is_visible(timeout=3000):
+                    logger.info(f"Dismissing cookie consent with selector: {selector}")
+                    cookie_button.click(timeout=5000)
+                    time.sleep(2)
+                    print("    ✓ Dismissed cookie consent")
+                    break
+            except Exception:
+                continue
+        
+        # Wait a bit more for page to stabilize after cookie consent
+        time.sleep(2)
         
         logger.info("Waiting for login form to appear")
         print("[+] Waiting for login form...")
@@ -308,6 +338,22 @@ def login_instagram(page) -> bool:
                 continue
         
         if not username_field:
+            # Debug: Try to find any input fields on the page
+            try:
+                all_inputs = page.locator("input").all()
+                logger.error(f"Found {len(all_inputs)} input fields on page")
+                for i, inp in enumerate(all_inputs[:5]):  # Log first 5 inputs
+                    try:
+                        input_type = inp.get_attribute("type") or "text"
+                        input_name = inp.get_attribute("name") or "no-name"
+                        input_aria = inp.get_attribute("aria-label") or "no-aria"
+                        input_placeholder = inp.get_attribute("placeholder") or "no-placeholder"
+                        logger.error(f"Input {i}: type={input_type}, name={input_name}, aria-label={input_aria}, placeholder={input_placeholder}")
+                    except:
+                        pass
+            except Exception as e:
+                logger.error(f"Could not inspect inputs: {e}")
+            
             error_msg = "Could not find username input field"
             logger.error(error_msg)
             raise ValueError(error_msg)
