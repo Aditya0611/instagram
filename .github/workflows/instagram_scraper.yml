@@ -31,6 +31,13 @@ jobs:
       - name: Download TextBlob Corpora
         run: python -m textblob.download_corpora
 
+      - name: Test Supabase Connection
+        run: python test_supabase_connection.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        continue-on-error: true
+
       - name: Run Instagram Scraper
         run: python main.py --run-once
         env:
@@ -38,7 +45,9 @@ jobs:
           INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          HEADLESS: "true"
         timeout-minutes: 45
+        continue-on-error: false
 
       - name: Upload results
         if: always()

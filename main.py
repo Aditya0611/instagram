@@ -126,8 +126,8 @@ class Config:
     POSTS_PER_HASHTAG: int = int(os.getenv("POSTS_PER_HASHTAG", "3"))
     
     # Supabase Configuration (from environment or default)
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "https://rnrnbbxnmtajjxscawrc.supabase.co")
-    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJucm5iYnhubXRhamp4c2Nhd3JjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MzI4OTYsImV4cCI6MjA3MjQwODg5Nn0.WMigmhXcYKYzZxjQFmn6p_Y9y8oNVjuo5YJ0-xzY4h4")
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL") or "https://rnrnbbxnmtajjxscawrc.supabase.co"
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJucm5iYnhubXRhamp4c2Nhd3JjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MzI4OTYsImV4cCI6MjA3MjQwODg5Nn0.WMigmhXcYKYzZxjQFmn6p_Y9y8oNVjuo5YJ0-xzY4h4"
     
     # Scheduler Configuration
     SCHEDULE_HOURS: int = int(os.getenv("SCHEDULE_HOURS", "3"))  # Default: every 3 hours
@@ -802,13 +802,21 @@ def save_to_supabase(supabase: Client, trend_record: TrendRecord) -> bool:
         
         if result.data:
             logger.info(f"Successfully saved trend: {trend_record.hashtags[0]}")
+            print(f"    ✅ Database save confirmed - Record ID: {result.data[0].get('id', 'N/A')}")
             return True
         else:
-            logger.error(f"Failed to save trend: {trend_record.hashtags[0]} - No data returned")
+            error_msg = f"Failed to save trend: {trend_record.hashtags[0]} - No data returned from Supabase"
+            logger.error(error_msg)
+            print(f"    ❌ {error_msg}")
+            if hasattr(result, 'error') and result.error:
+                logger.error(f"Supabase error details: {result.error}")
+                print(f"    ⚠️  Error details: {result.error}")
             return False
         
     except Exception as e:
-        logger.error(f"Database save error for {trend_record.hashtags[0]}: {str(e)}")
+        error_msg = f"Database save error for {trend_record.hashtags[0]}: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        print(f"    ❌ {error_msg}")
         return False
 
 def update_trend_lifecycle(supabase: Client, hashtag: str, version: str):
