@@ -531,14 +531,96 @@ def login_instagram(page) -> bool:
         if not login_clicked:
             raise Exception("Failed to click login button with all methods")
         
-        # Wait for login success
+        # Wait for login success - check multiple possible outcomes
         logger.info("Waiting for login confirmation")
         print("[+] Waiting for login to complete...")
-        page.wait_for_selector(HOME_SELECTOR, timeout=TIMEOUT_LOGIN_SUCCESS, state="visible")
         
-        logger.info("Login successful")
-        print("✅ Login successful!\n")
-        time.sleep(DELAY_LOGIN_WAIT)
+        # Wait a bit for page to respond
+        time.sleep(3)
+        
+        # Check current URL to see where we are
+        current_url = page.url
+        logger.info(f"URL after login attempt: {current_url}")
+        print(f"    Current URL: {current_url}")
+        
+        # Check for various outcomes
+        if "/challenge" in current_url or "/accounts/login/challenge" in current_url:
+            error_msg = "Instagram is showing a challenge/verification page. Manual intervention may be required."
+            logger.error(error_msg)
+            print(f"❌ {error_msg}")
+            print("    Instagram may require phone/email verification or CAPTCHA")
+            raise ValueError(error_msg)
+        
+        if "/two_factor" in current_url or "/accounts/two_factor" in current_url:
+            error_msg = "Instagram requires two-factor authentication. 2FA is not supported in automated login."
+            logger.error(error_msg)
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
+        
+        if "/accounts/login" in current_url:
+            # Still on login page - check for error messages
+            try:
+                error_selectors = [
+                    "div[role='alert']",
+                    "p#slfErrorAlert",
+                    "div:has-text('incorrect')",
+                    "div:has-text('error')",
+                    "div:has-text('try again')"
+                ]
+                for selector in error_selectors:
+                    try:
+                        error_element = page.locator(selector).first
+                        if error_element.is_visible(timeout=2000):
+                            error_text = error_element.inner_text()
+                            error_msg = f"Login error detected: {error_text[:100]}"
+                            logger.error(error_msg)
+                            print(f"❌ {error_msg}")
+                            raise ValueError(error_msg)
+                    except:
+                        continue
+            except:
+                pass
+            
+            error_msg = "Login failed - still on login page. Credentials may be incorrect or account may be locked."
+            logger.error(error_msg)
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
+        
+        # Try to find home indicator with multiple selectors and longer timeout
+        home_found = False
+        home_selectors = [
+            HOME_SELECTOR,
+            "svg[aria-label='Home']",
+            "a[href='/']",
+            "nav[role='navigation']",
+            "header[role='banner']"
+        ]
+        
+        for selector in home_selectors:
+            try:
+                page.wait_for_selector(selector, timeout=10000, state="visible")
+                logger.info(f"Found home indicator with selector: {selector}")
+                home_found = True
+                break
+            except:
+                continue
+        
+        if not home_found:
+            # Check if we're on a different page that might indicate success
+            if current_url.startswith(INSTAGRAM_BASE_URL) and "/accounts/login" not in current_url:
+                logger.info("Not on login page - assuming login successful")
+                print("✅ Login appears successful (redirected from login page)\n")
+                home_found = True
+            else:
+                error_msg = "Could not confirm login success - home page not found"
+                logger.error(error_msg)
+                print(f"❌ {error_msg}")
+                raise ValueError(error_msg)
+        
+        if home_found:
+            logger.info("Login successful")
+            print("✅ Login successful!\n")
+            time.sleep(DELAY_LOGIN_WAIT)
 
         # Dismiss popups
         logger.info("Dismissing Instagram popups")
