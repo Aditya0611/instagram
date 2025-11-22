@@ -301,21 +301,43 @@ def login_instagram(page) -> bool:
     try:
         logger.info("Navigating to Instagram login page")
         print("[+] Navigating to Instagram...")
-        # Try multiple wait strategies for Instagram's dynamic page
+        
+        # Navigate to login page
         try:
-            page.goto(INSTAGRAM_LOGIN_URL, wait_until="networkidle", timeout=30000)
-        except:
-            # Fallback to domcontentloaded if networkidle times out
-            page.goto(INSTAGRAM_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+            response = page.goto(INSTAGRAM_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+            logger.info(f"Page loaded with status: {response.status if response else 'No response'}")
+            print(f"    Page status: {response.status if response else 'Unknown'}")
+        except Exception as e:
+            logger.error(f"Error navigating to login page: {e}")
+            raise
         
         # Wait for page to fully render (Instagram uses React/JS)
-        time.sleep(5)
+        print("[+] Waiting for page to fully load...")
+        time.sleep(8)  # Increased wait time for JavaScript to execute
         
         # Wait for any loading indicators to disappear
         try:
-            page.wait_for_load_state("networkidle", timeout=10000)
+            page.wait_for_load_state("networkidle", timeout=15000)
+            logger.info("Page reached networkidle state")
         except:
-            pass  # Continue even if networkidle times out
+            logger.warning("Networkidle timeout, continuing anyway")
+            pass
+        
+        # Check what URL we're actually on
+        current_url = page.url
+        logger.info(f"Current URL after navigation: {current_url}")
+        print(f"    Current URL: {current_url}")
+        
+        # Check if we were redirected
+        if "/challenge" in current_url or "/accounts/login/challenge" in current_url:
+            error_msg = "Instagram is showing a challenge/verification page. Automation may be detected."
+            logger.error(error_msg)
+            print(f"❌ {error_msg}")
+            raise ValueError(error_msg)
+        
+        if "/accounts/login" not in current_url and current_url != INSTAGRAM_LOGIN_URL:
+            logger.warning(f"Unexpected redirect to: {current_url}")
+            print(f"    ⚠️  Redirected to: {current_url}")
         
         # Check if already logged in
         if page.url.startswith(INSTAGRAM_BASE_URL) and "/accounts/login" not in page.url:
@@ -1075,19 +1097,57 @@ def run_scraper_job() -> None:
             ]
         )
         
-        # Create context with configured settings
+        # Create context with configured settings - make it look like a real browser
         context = browser.new_context(
             viewport={'width': Config.VIEWPORT_WIDTH, 'height': Config.VIEWPORT_HEIGHT},
             locale=Config.LOCALE,
             timezone_id=Config.TIMEZONE,
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            # Add extra headers to look more realistic
+            extra_http_headers={
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0'
+            }
         )
         
-        # Hide automation
+        # Hide automation indicators
         context.add_init_script("""
+            // Remove webdriver property
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
             });
+            
+            // Override plugins to look more realistic
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5]
+            });
+            
+            // Override languages
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en']
+            });
+            
+            // Override permissions
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+            
+            // Mock chrome object
+            window.chrome = {
+                runtime: {}
+            };
         """)
         
         page = context.new_page()
