@@ -133,7 +133,14 @@ class Config:
     SCHEDULE_HOURS: int = int(os.getenv("SCHEDULE_HOURS", "3"))  # Default: every 3 hours
     
     # Browser Configuration
-    HEADLESS: bool = os.getenv("HEADLESS", "false").lower() == "true"
+    # Default to headless=True in CI environments (GitHub Actions, etc.)
+    _headless_env = os.getenv("HEADLESS", "").lower()
+    if _headless_env == "":
+        # If not set, default to True (headless) if in CI environment
+        _is_ci = os.getenv("CI", "false").lower() == "true" or os.getenv("GITHUB_ACTIONS", "false").lower() == "true"
+        HEADLESS: bool = _is_ci
+    else:
+        HEADLESS: bool = _headless_env == "true"
     VIEWPORT_WIDTH: int = 1920
     VIEWPORT_HEIGHT: int = 1080
     LOCALE: str = "en-US"
